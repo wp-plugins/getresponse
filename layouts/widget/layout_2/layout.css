@@ -1,0 +1,101 @@
+.fca_eoi_layout_2 {
+	padding: .8em;
+}
+.fca_eoi_layout_2 h3 {
+	box-sizing: content-box;
+	font-weight: normal;
+	margin: 0 !important;
+	padding: .5em !important;
+	text-align: center;
+	line-height: 1.2 !important;
+}
+.fca_eoi_layout_2 p {
+	margin: .75em 0 !important;
+}
+.fca_eoi_layout_2 .ribbon {
+	font-size: 24px !important;
+	position: relative;
+	text-align: center;
+	padding: .75em 2em !important;
+	margin: 0 0 3em;
+	width: calc(100% + 2em);
+	max-width: calc(100% - 2em);
+	margin-left: -1em !important;
+}
+.fca_eoi_layout_2 .ribbon .ribbon-content:before,
+.fca_eoi_layout_2 .ribbon .ribbon-content:after {
+	content: "";
+	position: absolute;
+	display: block;
+	border-style: solid;
+	border-color: transparent;
+	bottom: -.5em;
+}
+.fca_eoi_layout_2 .ribbon .ribbon-content:before {
+	left: 0;
+	border-width: .5em 0 0 .5em;
+}
+.fca_eoi_layout_2 .ribbon .ribbon-content:after {
+	right: 0;
+	border-width: .5em .5em 0 0;
+}
+.fca_eoi_layout_2_description_copy_wrapper{
+	margin: 1em 0;
+	overflow: hidden;
+	text-align: center;
+}
+.fca_eoi_layout_2_description_copy_wrapper img{
+	margin: 0 .5em .5em;
+}
+.fca_eoi_layout_2_email_field_wrapper,
+.fca_eoi_layout_2_name_field_wrapper {
+	padding: .5em !important;
+	border: solid 1px transparent;
+}
+.fca_eoi_layout_2_email_field_wrapper input,
+.fca_eoi_layout_2_name_field_wrapper input {
+	background: transparent;
+}
+.fca_eoi_layout_2_email_field_wrapper .fa,
+.fca_eoi_layout_2_name_field_wrapper .fa{
+	font-size: 1.5em;
+	opacity: .7;
+	text-align: center;
+	width: 1em;
+}
+.fca_eoi_layout_2_email_field_wrapper input,
+.fca_eoi_layout_2_email_field_wrapper input:focus,
+.fca_eoi_layout_2_name_field_wrapper input,
+.fca_eoi_layout_2_name_field_wrapper input:focus {
+	border-color: transparent;
+	box-shadow: none;
+	display: inline-block;
+	margin: 0 .5em;
+	padding: 0;
+	width: calc(100% - 3em);
+}
+.fca_eoi_layout_2_submit_button_wrapper input {
+	background: none;
+	border-width: 0;
+	border-bottom: solid 3px transparent;
+}
+.fca_eoi_layout_2_submit_button_wrapper input:hover {
+	background: none;
+}
+.fca_eoi_layout_2 input[type=submit] {
+	border-color: transparent;
+	border-radius: 0;
+	box-shadow: none;
+	font-size: 1.4em;
+	font-weight: bold;
+	padding: .5em;
+	width: 100%;
+}
+.fca_eoi_layout_2_privacy_copy_wrapper {
+	text-align: center;
+}
+.fca_eoi_layout_2_fatcatapps_link_wrapper {
+	font-size: 12px;
+	text-align: center;
+}
+::-webkit-input-placeholder{color:inherit;opacity:.7}:-moz-placeholder{color:inherit;opacity:.7}::-moz-placeholder{color:inherit;opacity:.7}:-ms-input-placeholder{color:inherit;opacity:.7}
