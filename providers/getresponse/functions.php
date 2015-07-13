@@ -1,6 +1,16 @@
 <?php
 
 function getresponse_object( $settings ) {
+	static $object = null;
+
+	if ( is_null( $object ) ) {
+		$object = getresponse_object_create( $settings );
+	}
+
+	return $object;
+}
+
+function getresponse_object_create( $settings ) {
 
 	if( ! class_exists( 'GetResponseApi' ) ) {
 		require_once $settings[ 'plugin_dir' ] . "providers/getresponse/GetResponseAPI.class.php";
@@ -40,15 +50,17 @@ function getresponse_object( $settings ) {
 
 function getresponse_get_lists( $settings ) {
 
+	$helper = getresponse_object( $settings );
+
 	// Return an empty array if the object is not a valid GetResponse Api instance
-	if ( ! is_a( $settings[ 'getresponse_helper' ], 'GetResponseApi' ) ) {
+	if ( empty( $helper ) ) {
 		return array();
 	}
 
 	$error_handler = new EasyOptInsErrorHandler();
 	$error_handler->capture_start();
 
-	$lists = $settings[ 'getresponse_helper' ]->getCampaigns();
+	$lists = $helper->getCampaigns();
 
 	$error_handler->capture_end();
 
@@ -94,17 +106,16 @@ function getresponse_ajax_get_lists() {
 
 function getresponse_add_user( $settings, $user_data, $list_id ) {
 
-	if( empty( $settings[ 'getresponse_helper' ] ) ) {
+	$helper = getresponse_object( $settings );
+
+	if ( empty( $helper ) ) {
 		return false;
 	}
 
 	$error_handler = new EasyOptInsErrorHandler();
 	$error_handler->capture_start();
 
-    $result = $settings[ 'getresponse_helper' ]->addContact($list_id,
-                                                            K::get_var( 'name', $user_data  ),
-                                                            K::get_var( 'email', $user_data )
-                                                            );
+	$result = $helper->addContact( $list_id, K::get_var( 'name', $user_data ), K::get_var( 'email', $user_data ) );
 
 	$error_handler->capture_end();
 
@@ -132,10 +143,10 @@ function getresponse_string( $def_str ) {
 	return K::get_var( $def_str, $strings, $def_str );
 }
 
-function getresponse_integration( $helper ) {
+function getresponse_integration( $settings ) {
 
 	// Detect free version (has getresponse only)
-	$eoi_free = 'getresponse' === K::get_var( 'provider', $helper ) ;
+	$eoi_free = 'getresponse' === K::get_var( 'provider', $settings );
 
 	global $post;
 	$fca_eoi = get_post_meta( $post->ID, 'fca_eoi', true );
@@ -155,7 +166,7 @@ function getresponse_integration( $helper ) {
 	// Remember old Getresponse settings if we are in a new form
 	$suggested = array();
 	if ( 'add' === $screen->action ) {
-		$fca_eoi_last_3_forms = $helper[ 'fca_eoi_last_3_forms' ];
+		$fca_eoi_last_3_forms = $settings[ 'fca_eoi_last_3_forms' ];
 		foreach ( $fca_eoi_last_3_forms as $fca_eoi_previous_form ) {
 			try {
 				if( K::get_var( 'getresponse_list_id', $fca_eoi_previous_form[ 'fca_eoi' ] ) ) {
@@ -172,7 +183,7 @@ function getresponse_integration( $helper ) {
 	}
 
 	// Prepare the lists for K
-	$lists = getresponse_get_lists( $helper );
+	$lists = getresponse_get_lists( $settings );
 
 	$lists_formatted = array( '' => 'Not set' );
 

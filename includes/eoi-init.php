@@ -26,13 +26,54 @@ class EasyOptInsInit {
 		return self::$instance;
 	}
 
+	private function require_new_css() {
+		$powerup_path = dirname( __FILE__ ) . '/../powerups/4_new_css/powerup.php';
+
+		if ( file_exists( $powerup_path ) ) {
+			require_once $powerup_path;
+			return true;
+		}
+
+		return false;
+	}
+
 	public function on_install() {
-		powerup_new_css_set_active( true );
-		$this->set_new_css_notification_dismissed( true );
+		if ( $this->require_new_css() ) {
+			powerup_new_css_set_active( true );
+			$this->set_new_css_notification_dismissed( true );
+		}
 	}
 
 	public function on_uninstall() {
 		delete_option( $this->keys['plugin_version'] );
+	}
+
+	private function on_upgrade( $old_version, $new_version ) {
+		if ( $this->require_new_css() ) {
+			if ( $new_version == '1.3.2' && powerup_new_css_is_active() ) {
+				require_once dirname( __FILE__ ) . '/eoi-layout.php';
+
+				powerup_new_css_set_active( false );
+				powerup_new_css_set_active( true );
+			}
+		}
+	}
+
+	public function on_activate() {
+		require_once( ABSPATH . 'wp-admin/includes/plugin.php' );
+		$plugin_data = get_plugin_data( FCA_EOI_PLUGIN_FILE );
+
+		$new_version = $plugin_data['Version'];
+		$old_version = get_option( $this->keys['plugin_version'] );
+		if ( empty( $old_version ) && $this->has_forms() ) {
+			$old_version = '1.2';
+		}
+
+		if ( empty( $old_version ) ) {
+			$this->on_install();
+		} elseif ( version_compare( $old_version, $new_version, '<' ) ) {
+			$this->on_upgrade( $old_version, $new_version );
+		}
 	}
 
 	public function setup() {
@@ -41,13 +82,21 @@ class EasyOptInsInit {
 	}
 
 	public function admin_init() {
-		$saved_plugin_version = get_option( $this->keys['plugin_version'] );
-		if ( empty( $saved_plugin_version ) ) {
-			$this->on_install();
-		}
-
 		$this->save_plugin_version();
 		$this->process_actions();
+	}
+
+	private function has_forms() {
+		global $wpdb;
+
+		$query = "
+			SELECT COUNT(*)
+			FROM $wpdb->posts
+			WHERE post_type = 'easy-opt-ins' AND ( post_status = 'publish' OR post_status = 'trash' )
+			LIMIT 1
+		";
+
+		return (int) $wpdb->get_var( $query, 0, 0 ) > 0;
 	}
 
 	public function save_plugin_version() {
@@ -132,11 +181,11 @@ class EasyOptInsInit {
 		<?php
 	}
 
-	private function is_new_css_notification_dismissed() {
+	public function is_new_css_notification_dismissed() {
 		return get_user_meta( $GLOBALS['current_user']->ID, $this->keys['new_css']['notification_dismissed'] );
 	}
 
-	private function set_new_css_notification_dismissed( $dismissed ) {
+	public function set_new_css_notification_dismissed( $dismissed ) {
 		return update_user_meta( $GLOBALS['current_user']->ID, $this->keys['new_css']['notification_dismissed'], $dismissed );
 	}
 }

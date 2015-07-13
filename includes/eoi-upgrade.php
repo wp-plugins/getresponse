@@ -119,7 +119,7 @@ class EasyOptInsUpgrade {
                             <li><div class="dashicons dashicons-yes"></div> Smart Popup Targeting</li>
                             <li><div class="dashicons dashicons-yes"></div> More Layouts</li>
                             <li><div class="dashicons dashicons-yes"></div> Two-Step Optins</li>
-                            <li><div class="dashicons dashicons-yes"></div> Offers Feature</li>
+                            <li><div class="dashicons dashicons-yes"></div> Content Upgrades</li>
                             <li><div class="dashicons dashicons-yes"></div> Exit Intervention</li>
                             <li><div class="dashicons dashicons-yes"></div> Priority Email Support</li>
                             <?php if ( $is_mailchimp ): ?>

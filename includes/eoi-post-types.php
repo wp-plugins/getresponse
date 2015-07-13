@@ -9,11 +9,17 @@ class EasyOptInsPostTypes {
 		'dashboard_widget' => 30
 	);
 
+	private $targeting_cat_path = 'assets/vendor/targeting-cat/TargetingCat-OptinCat-1.0.js';
+
 	public function __construct( $settings ) {
 
 		$this->settings = $settings;
 
 		$providers_available = array_keys( $this->settings[ 'providers' ] );
+
+		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+			$this->targeting_cat_path = str_replace( '.js', '.min.js', $this->targeting_cat_path );
+		}
 
 		// Register custom post type
 		add_action( 'init', array( $this, 'register_custom_post_type' ) );
@@ -40,7 +46,6 @@ class EasyOptInsPostTypes {
 		add_filter( 'the_content', array( $this, 'live_preview' ) );
 
 		// Scripts and styles
-		add_filter( 'wp_enqueue_scripts', array( $this, 'enqueue' ) );
 		add_filter( 'admin_enqueue_scripts', array( $this, 'admin_enqueue' ) );
 		add_filter( 'admin_enqueue_scripts', array( $this, 'disable_autosave' ) );
 
@@ -70,10 +75,9 @@ class EasyOptInsPostTypes {
 
 		add_filter( 'init', array( $this, 'bind_content_filter' ), 10 );
 
-		add_action( 'init', array( $this, 'cookies' ) );
+		add_filter( 'init', array( $this, 'parse_tc_condition_request' ), 1 );
+
 		add_filter( 'wp_footer', array( $this, 'show_lightbox' ) );
-		add_action( 'wp_ajax_fca_eoi_lightbox_set_cookie', array( $this, 'fca_eoi_lightbox_set_cookie' ) );
-		add_action( 'wp_ajax_nopriv_fca_eoi_lightbox_set_cookie', array( $this, 'fca_eoi_lightbox_set_cookie' ) );
 
 		foreach ( $providers_available as $provider ) {
 			add_action( 'wp_ajax_fca_eoi_' . $provider . '_get_lists', $provider . '_ajax_get_lists' );
@@ -119,14 +123,6 @@ class EasyOptInsPostTypes {
 		// reset query after the loop
 		wp_reset_query();
 		$this->settings[ 'fca_eoi_last_3_forms' ] = $fca_eoi_last_3_forms;
-
-		// Initialize provider(s) instance(s)
-		foreach ( $providers_available as $provider ) {
-			$this->settings[ $provider . '_helper' ] = empty ( $form_id )
-				? call_user_func( $provider . '_object', $this->settings )
-				: call_user_func( $provider . '_object', $this->settings );
-			;
-		}
 	}
 
 	public function register_custom_post_type() {
@@ -1594,16 +1590,6 @@ class EasyOptInsPostTypes {
 		}
 	}
 
-	public function enqueue() {
-		wp_enqueue_script( 'featherlight'
-			, $this->settings['plugin_url'] . '/assets/vendor/featherlight/release/featherlight.min.js'
-			, array( 'jquery' )
-		);
-		wp_enqueue_style( 'featherlight'
-			, $this->settings['plugin_url'] . '/assets/vendor/featherlight/release/featherlight.min.css'
-		);
-	}
-
 	public function admin_enqueue() {
 
 		$protocol = is_ssl() ? 'https' : 'http';
@@ -1979,36 +1965,24 @@ class EasyOptInsPostTypes {
 			return;
 		}
 
-		$url = 'http'
-			. ( is_ssl() ? 's' : '' )
-			. '://'
-			. $_SERVER[ 'HTTP_HOST' ]
-			. $_SERVER[ 'REQUEST_URI' ]
-		;
-		$post_ID = url_to_postid( $url );
-		
-		// Do nothing if not viewing a post
-		if( ! $post_ID ) {
-			return;
-		}
-
-		// Do nothing if viewing an opt-in
-		if( 'easy-opt-ins' === get_post_type( get_post( $post_ID ) ) ) {
-			return;
-		}
-
-		// Great, we attach the filter now
-		add_filter( 'the_content', array( $this, 'content' ), 10, 1 );
+		add_action( 'wp', array( $this, 'content' ), 10 );
 	}
 
-	public function content( $content ) {
+	public function content() {
 
 		global $post;
 
+		// Do nothing if viewing an opt-in
+		if ( 'easy-opt-ins' === $post->post_type ) {
+			return;
+		}
+
 		// Work only when viewing a post of any type
 		if ( empty( $post ) ) {
-			return $content;
+			return;
 		}
+
+		$priorities = array();
 
 		// Post details
 		$post_ID = $post->ID;
@@ -2023,11 +1997,20 @@ class EasyOptInsPostTypes {
 		if ( is_front_page() ) {
 			$post_cond[] = '~';
 		}
+
+		$priorities[] = '#' . $post_ID;
+
 		$taxonomies = get_taxonomies('','names');
 		$post_taxonomies = wp_get_object_terms( $post->ID,$taxonomies);
 		foreach ( $post_taxonomies as $t ) {
-			$post_cond[] = $post_type . ':' . $t->term_id;
+			$condition = $post_type . ':' . $t->term_id;
+
+			$post_cond[] = $condition;
+			$priorities[] = $condition;
 		}
+
+		$priorities[] = $post_type;
+		$priorities[] = '*';
 
 		$fca_eoi_last_99_forms = array();
 		foreach (get_posts( 'posts_per_page=99&post_type=easy-opt-ins' ) as $i => $f ) {
@@ -2035,6 +2018,8 @@ class EasyOptInsPostTypes {
 			$fca_eoi_last_99_forms[ $i ][ 'fca_eoi' ] = get_post_meta( $f->ID, 'fca_eoi', true );
 		}
 		// wp_reset_query();
+
+		$postboxes = array();
 
 		// Append postcode shortcode when the conditions match
 		foreach( $fca_eoi_last_99_forms as $f) {
@@ -2052,91 +2037,259 @@ class EasyOptInsPostTypes {
 		
 			// Append
 			if ( array_intersect( $eoi_form_cond, $post_cond ) ) {
-				$shortcode = sprintf( '[%s id=%d]', $this->settings[ 'shortcode' ], $f[ 'post' ]->ID );
-				$content .= $shortcode;
+				foreach ( $eoi_form_cond as $cond ) {
+					if ( empty( $postboxes[ $cond ] ) ) {
+						$postboxes[ $cond ] = sprintf( '[%s id=%d]', $this->settings['shortcode'], $f['post']->ID );
+					}
+				}
 			}
 		}
 
-		return $content;
-	}
+		if ( ! empty( $postboxes ) ) {
+			foreach ( $priorities as $cond ) {
+				if ( ! empty( $postboxes[ $cond ] ) ) {
+					$post->post_content .= $postboxes[ $cond ];
+					return;
+				}
+			}
 
-	public function cookies() {
-	
-		if( ! K::get_var( 'fca_eoi_session', $_COOKIE ) ) {
-			setcookie( 'fca_eoi_session'
-				, mt_rand()
-				, time() + 1800
-				, COOKIEPATH
-				, COOKIE_DOMAIN
-			);
-		}
-
-		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+			$post->post_content .= reset( $postboxes );
 			return;
 		}
+	}
 
-		setcookie( 'fca_eoi_last_visit_ts'
-			, time()
-			, time() + 86400 * 365
-			, COOKIEPATH
-			, COOKIE_DOMAIN
+	private function enqueue_featherlight() {
+		wp_enqueue_script( 'featherlight'
+			, $this->settings['plugin_url'] . '/assets/vendor/featherlight/release/featherlight.min.js'
+			, array( 'jquery' )
 		);
 
-		setcookie( 'fca_eoi_session_visits'
-			, K::get_var( 'fca_eoi_session_visits', $_COOKIE, 0 ) + 1
-			, time() + 1800
-			, COOKIEPATH
-			, COOKIE_DOMAIN
+		wp_enqueue_style( 'featherlight'
+			, $this->settings['plugin_url'] . '/assets/vendor/featherlight/release/featherlight.min.css'
 		);
 	}
 
-	public function show_lightbox() {
+	private function get_tc_token( $form_id ) {
+		return "$form_id";
+	}
 
-		global $post;
+	private function to_call_tc_condition( $name, $arguments ) {
+		return array_merge( array( $name ), $arguments );
+	}
 
-		$url = sprintf( '%s://%s%s'
-			, is_ssl() ? 'https' : 'http'
-			, $_SERVER[ "HTTP_HOST" ]
-			, $_SERVER[ "REQUEST_URI" ]
-		);
-		$post_ID = url_to_postid( $url );
+	private function to_value_tc_condition( $form_id, $name, $eoi_condition ) {
+		$value  = intval( $eoi_condition['value'] );
+		$params = array( $value );
 
-		// Do not show lightbox on mobile
-		$mobile_detect = new Mobile_Detect;
-		if ( $mobile_detect->isMobile() ) {
-			return;
+		if ( $name === 'page_views' ) {
+			$params[] = $this->get_tc_token( $form_id );
+		} else if ( $name === 'time_on_page' ) {
+			$params[0] *= 1000;
 		}
 
-		// Post conditions
+		return $this->to_call_tc_condition( $name, $params );
+	}
+
+	private function to_server_pass_tc_condition( $post_id, $parameter, $eoi_condition ) {
+		$url = add_query_arg( array(
+			'fca_eoi_tc_condition_pass' => urlencode( $parameter ),
+			'fca_eoi_tc_condition_value' => urlencode( implode( ',', $eoi_condition['value'] ) ),
+			'fca_eoi_tc_condition_post_id' => $post_id
+		) );
+
+		return $this->to_call_tc_condition( 'server_pass', array( $url, 'true' ) );
+	}
+
+	private function to_tc_condition( $form_id, $post_id, $eoi_condition ) {
+		$eoi_to_tc_value_map = array(
+			'pageviews' => 'page_views',
+			'scrolled_percent' => 'scroll_percent',
+			'time_on_page' => 'time_on_page'
+		);
+
+		$eoi_server_pass_conditions = array( 'include', 'exclude' );
+
+		$parameter = $eoi_condition['parameter'];
+		if ( array_key_exists( $parameter, $eoi_to_tc_value_map ) ) {
+			return $this->to_value_tc_condition( $form_id, $eoi_to_tc_value_map[ $parameter ], $eoi_condition );
+		} else if ( in_array( $parameter, $eoi_server_pass_conditions ) ) {
+			return $this->to_server_pass_tc_condition( $post_id, $parameter, $eoi_condition );
+		}
+
+		return null;
+	}
+
+	private function to_show_every_tc_condition( $form_id, $condition ) {
+		if ( in_array( $condition, array( 'day', 'month', 'once', 'session' ) ) ) {
+			return array( $condition, $this->get_tc_token( $form_id ) );
+		} elseif ( $condition === 'always' ) {
+			return 'true';
+		} elseif ( $condition === 'never' ) {
+			return 'false';
+		}
+
+		return $condition;
+	}
+
+	private function get_tc_conditions( $form_id, $post_id, $conditions ) {
+		$tc_conditions = array();
+
+		if ( ! empty( $conditions['show_every'] ) ) {
+			$tc_conditions[] = $this->to_show_every_tc_condition( $form_id, $conditions['show_every'] );
+		}
+
+		$has_exit = false;
+
+		if ( ! empty( $conditions['conditions'] ) ) {
+			foreach ( $conditions['conditions'] as $condition ) {
+				if ( $condition['parameter'] === 'exit_intervention' ) {
+					$has_exit = true;
+					continue;
+				}
+
+				$tc_condition = $this->to_tc_condition( $form_id, $post_id, $condition );
+				if ( ! empty( $tc_condition ) ) {
+					$tc_conditions[] = $tc_condition;
+				}
+			}
+		}
+
+		$tc_conditions = array( 'and' => $tc_conditions );
+
+		if ( $has_exit ) {
+			return array( 'sequence' => array( $tc_conditions, 'exit' ) );
+		} else {
+			return $tc_conditions;
+		}
+	}
+
+	private function echo_tc_conditions_for_form( $form_id, $post_id ) {
+		$fca_eoi = get_post_meta( $form_id , 'fca_eoi', true );
+		$publish_lightbox = K::get_var( 'publish_lightbox', $fca_eoi, array() );
+
+		header( 'Content-Type: application/json' );
+		exit( json_encode( $this->get_tc_conditions( $form_id, $post_id, $publish_lightbox ) ) );
+	}
+
+	private function echo_tc_condition_pass( $post_id, $type, $values ) {
 		$post_cond = array( '*' );
+
 		if ( is_front_page() ) {
 			$post_cond[] = '~';
 		}
-		if ( $post_ID ) {
-			$post_type = get_post_type( $post_ID );
+
+		if ( $post_id ) {
+			$post_type = get_post_type( $post_id );
 
 			$post_cond[] = $post_type;
-			$post_cond[] = '#' . $post_ID;
+			$post_cond[] = '#' . $post_id;
 
-			$taxonomies = get_taxonomies('','names');
-			$post_taxonomies = wp_get_object_terms( $post->ID,$taxonomies);
+			$taxonomies = get_taxonomies( '', 'names' );
+			$post_taxonomies = wp_get_object_terms( $post_id, $taxonomies );
+
 			foreach ( $post_taxonomies as $t ) {
 				$post_cond[] = $post_type . ':' . $t->term_id;
 			}
 		}
 
+		$intersect = array_intersect( $values, $post_cond );
+
+		if ( $type === 'include' ) {
+			echo $intersect ? 'true' : 'false';
+		} else if ( $type === 'exclude' ) {
+			echo $intersect ? 'false' : 'true';
+		}
+
+		exit;
+	}
+
+	public function parse_tc_condition_request() {
+		$post_id = empty( $_REQUEST['fca_eoi_tc_condition_post_id'] ) ? 0 : (int) $_REQUEST['fca_eoi_tc_condition_post_id'];
+
+		if ( ! empty( $_REQUEST['fca_eoi_tc_conditions_for'] ) ) {
+			$form_id = (int) $_REQUEST['fca_eoi_tc_conditions_for'];
+			$this->echo_tc_conditions_for_form( $form_id, $post_id );
+		}
+
+		if ( ! empty( $_REQUEST['fca_eoi_tc_condition_pass'] ) ) {
+			$this->echo_tc_condition_pass(
+				$post_id,
+				$_REQUEST['fca_eoi_tc_condition_pass'],
+				explode( ',', $_REQUEST['fca_eoi_tc_condition_value'] )
+			);
+		}
+	}
+
+	private function get_cookie_configuration() {
+		$cookie_configuration = array();
+
+		if ( defined( 'COOKIEPATH' ) ) {
+			$path = COOKIEPATH;
+			if ( ! empty( $path ) ) {
+				$cookie_configuration['path'] = $path;
+			}
+		}
+
+		if ( defined( 'COOKIE_DOMAIN' ) ) {
+			$domain = COOKIE_DOMAIN;
+			if ( ! empty( $domain ) ) {
+				$cookie_configuration['domain'] = $domain;
+			}
+		}
+
+		return $cookie_configuration;
+	}
+
+	private function prepare_targeting_cat() {
+		static $prepared = false;
+
+		if ( $prepared ) {
+			return;
+		} else {
+			$prepared = true;
+		}
+
+		wp_enqueue_script( 'TargetingCat', $this->settings['plugin_url'] . '/' . $this->targeting_cat_path );
+
+		?>
+		<script>
+			var fca_eoi_tc_configured = false;
+
+			function fca_eoi_on_conditions_pass( form_id, callback ) {
+				jQuery.post( window.location.href, {
+					'fca_eoi_tc_condition_post_id': <?php echo $GLOBALS['post']->ID ?>,
+					'fca_eoi_tc_conditions_for': form_id
+				}, function( descriptors ) {
+					if ( ! fca_eoi_tc_configured ) {
+						TargetingCat_OptinCat.StorageManagerCookie.get_instance().default_configuration = <?php echo json_encode( $this->get_cookie_configuration() ) ?>;
+						fca_eoi_tc_configured = true;
+					}
+
+					if ( typeof descriptors === 'string' ) {
+						descriptors = JSON.parse( descriptors );
+					}
+
+					var evaluable = TargetingCat_OptinCat.ConditionManager.get_instance().parse_descriptors( descriptors );
+					if ( evaluable ) {
+						evaluable.set_pass_callback( callback );
+						evaluable.evaluate();
+					}
+				} );
+			}
+		</script>
+		<?php
+	}
+
+	public function show_lightbox() {
+		// Do not show lightbox on mobile if this is the free distribution
+		if ( $this->settings[ 'distribution' ] === 'free' ) {
+			$mobile_detect = new Mobile_Detect;
+			if ( $mobile_detect->isMobile() ) {
+				return;
+			}
+		}
+
 		$has_two_step_optin = false;
-		$fca_eoi_last_visit_ts = K::get_var( 'fca_eoi_last_visit_ts', $_COOKIE, 0 );
-		$fca_eoi_lightbox_shown_ts = K::get_var( 'fca_eoi_lightbox_shown_ts', $_COOKIE, 0 );
-		$fca_eoi_cookie_diff = $fca_eoi_last_visit_ts - $fca_eoi_lightbox_shown_ts;
-		$fca_eoi_cookie_diff_helper = array(
-			'never' => 0,
-			'always' => 0,
-			'session' => 30 * 60,
-			'day' => 86400,
-			'month' => 86400 * 30,
-			'once' => 86400 * 365.25,
-		);
 
 		// Get lightboxes
 		$lightboxes = get_posts( array(
@@ -2153,233 +2306,14 @@ class EasyOptInsPostTypes {
 			return;
 		}
 
-		switch ( $this->settings['distribution'] ) {
-		case 'free':
-			$conditions_options = array(
-				'time_on_page' => 'Time on page is at least (second)',
-			);
-			break;
-		case 'premium':
-			$conditions_options = array(
-				'pageviews' => 'Number of pageviews during this visit at least',
-				'scrolled_percent' => 'Scrolled down on current page at least (%)',
-				'time_on_page' => 'Time on page is at least (second)',
-				'include' => 'Only show popup on the following posts/pages',
-				'exclude' => 'Never show popup on the following posts/pages',
-				'exit_intervention' => 'User is about to close the page (Exit Intervention)'
-			);
-			break;
-		}
+		$has_lightboxes = false;
 
-		foreach ( $lightboxes as $lightbox ) {
+		if ( EasyOptInsLayout::uses_new_css() ) {
+			$is_iphone = preg_match('/(?:iPhone|iPod);/i', $_SERVER['HTTP_USER_AGENT']);
+			$is_ios = preg_match( '/(?:iPhone|iPad|iPod).* OS ([\d])_.* Safari/', $_SERVER['HTTP_USER_AGENT'], $matches );
 
-			// Get conditions
-			$lightbox->fca_eoi = get_post_meta( $lightbox->ID , 'fca_eoi', true );
-			$publish_lightbox = K::get_var( 'publish_lightbox', $lightbox->fca_eoi, array() );
-			$publish_lightbox_mode = K::get_var( 'publish_lightbox_mode', $lightbox->fca_eoi, array() );
-			$show_every = K::get_var( 'show_every', $publish_lightbox, 'always' );
-			$conditions = K::get_var( 'conditions', $publish_lightbox, array() );
-			$cookie_ts = sprintf( 'fca_eoi_lightbox_%d_%d_ts'
-				, $lightbox->ID
-				, K::get_var( 'fca_eoi_session', $_COOKIE )
-			);
-
-			// If on a free disctibution, force traditional popup mode
-			if ( 'free' === $this->settings['distribution'] ) {
-				$publish_lightbox_mode = 'traditional_popup';
-			}
-
-			$is_exit_intervention = false;
-
-			if ( 'two_step_optin' === $publish_lightbox_mode ) {
-				// Add blocking condition
-				$conditions[] = array(
-					'parameter' => 'blocker',
-					'value' => 'dummy',
-				);
-				// Tell that we should show two_step_optin JS
-				$has_two_step_optin = true;
-			} else if ( 'traditional_popup' === $publish_lightbox_mode ) {
-				/**
-				 * Move exit intervention to the end of the conditions array
-				 */
-				$exit_intervention_condition = null;
-				foreach ( $conditions as $condition_id => $condition ) {
-					if ( 'exit_intervention' === $condition['parameter'] ) {
-						$exit_intervention_condition = array( $condition_id, $condition );
-						break;
-					}
-				}
-				if ( $exit_intervention_condition ) {
-					unset( $conditions[ $exit_intervention_condition[ 0 ] ] );
-					$conditions[ $exit_intervention_condition[ 0 ] ] = $exit_intervention_condition[ 1 ];
-				}
-
-				/**
-				 * Check condition: show_every (s)
-				 *
-				 * The lightbox will not be show if the lightbox cookie didn't expire yet
-				 */
-				if( 'never' === $show_every ) {
-					continue;
-				}
-				if( isset( $_COOKIE[ 'fca_eoi_lightbox_' . $lightbox->ID . '_session' ] ) ) {
-					continue;
-				}
-
-				/**
-				 * Remove every conditions that are not offered in this version
-				 */
-				reset( $conditions );
-				foreach ( $conditions as $condition_id=>$condition ) {
-					if ( ! array_key_exists( $condition[ 'parameter' ], $conditions_options ) ) {
-						unset( $conditions[ $condition_id ] );
-					}
-				}
-
-				/**
-				 * Check condition: slug
-				 */
-				reset( $conditions );
-				foreach ( $conditions as $condition ) {
-
-					// Ignore other conditions
-					if ( 'slug' !== $condition[ 'parameter' ] ) {
-						continue;
-					}
-
-					// get slug
-					global $post;
-					$slug = get_post( $post )->post_name;
-
-					// Test condition 
-					$b = fca_eoi_comp(
-						$slug
-						, $condition[ 'value' ]
-						, $condition[ 'operator' ]
-						, 'exclude' == $condition[ 'action' ]
-					);
-
-					// Ignore this lightbox if condition is not met
-					if( ! $b ) {
-						continue 2;
-					}
-				}
-
-				/**
-				 * Check condition: pageviews
-				 */
-				reset( $conditions );
-				foreach ( $conditions as $condition ) {
-
-					// Ignore other conditions
-					if ( 'pageviews' !== $condition[ 'parameter' ] ) {
-						continue;
-					}
-
-					// Test condition 
-					$b = fca_eoi_comp(
-						K::get_var( 'fca_eoi_session_visits', $_COOKIE, 0 ) + 1
-						, $condition[ 'value' ]
-						, 'gte'
-					);
-
-					// Ignore this lightbox if condition is not met
-					if( ! $b ) {
-						continue 2;
-					}
-
-				}
-
-				/**
-				 * Check condition: exlude
-				 */
-				reset( $conditions );
-				foreach ( $conditions as $condition ) {
-
-					// Ignore other conditions
-					if ( 'exclude' !== $condition[ 'parameter' ] ) {
-						continue;
-					}
-
-					// Ignore non-array
-					if ( ! is_array( $condition[ 'value' ] ) ) {
-						continue;
-					}
-
-					$b = ! array_intersect( $condition[ 'value' ], $post_cond );
-
-					// Ignore this lightbox if condition is not met
-					if( ! $b ) {
-						continue 2;
-					}
-				}
-
-				/**
-				 * Check condition: include
-				 */
-				reset( $conditions );
-				foreach ( $conditions as $condition ) {
-
-					// Ignore other conditions
-					if ( 'include' !== $condition[ 'parameter' ] ) {
-						continue;
-					}
-
-					// Ignore non-array
-					if ( ! is_array( $condition[ 'value' ] ) ) {
-						continue;
-					}
-
-					$b = array_intersect( $condition[ 'value' ], $post_cond );
-
-					// Ignore this lightbox if condition is not met
-					if( ! $b ) {
-						continue 2;
-					}
-				}
-
-				/**
-				 * Check condition: exit intervention
-				 */
-				reset( $conditions );
-				foreach ( $conditions as $condition ) {
-
-					// Ignore other conditions
-					if ( 'exit_intervention' !== $condition[ 'parameter' ] ) {
-						continue;
-					}
-
-					$is_exit_intervention = true;
-
-					wp_enqueue_script( 'ouibounce', $this->settings['plugin_url'] . '/assets/vendor/ouibounce/ouibounce.min.js' );
-				}
-			}
-
-			// Prepare $conditions for frontend, remove server side conditions
-			$conditions_js = array();
-			$needs_interval = true;
-			foreach ( $conditions as $k => $v ) {
-				if ( in_array( $v[ 'parameter' ] , array( 'blocker', 'time_on_page', 'scrolled_percent' ) ) ) {
-					$conditions_js[ $k ] = $v;
-				}
-			}
-
-			// Output
-			printf( '
-				<style>.%s-content { background: transparent !important; }</style>
-				<div style="display:none"><div id="fca_eoi_lightbox_%s">%s</div></div>'
-				, EasyOptInsLayout::uses_new_css() ? 'fca_eoi_featherlight' : 'featherlight'
-				, $lightbox->ID
-				, do_shortcode( "[easy-opt-in id=$lightbox->ID]" )
-			);
-
-			if ( EasyOptInsLayout::uses_new_css() ) {
-				$is_iphone = preg_match('/(?:iPhone|iPod);/i', $_SERVER['HTTP_USER_AGENT']);
-				$is_ios = preg_match( '/(?:iPhone|iPad|iPod).* OS ([\d])_.* Safari/', $_SERVER['HTTP_USER_AGENT'], $matches );
-
-				if ( $is_ios ) {
-					$ios_specific_options = ',
+			if ( $is_ios ) {
+				$ios_specific_options = ',
 					beforeOpen: function() {
 						var viewport = jQuery( "meta[name=viewport]" );
 						if ( viewport.length == 0 ) {
@@ -2423,101 +2357,63 @@ class EasyOptInsPostTypes {
 							window.removeEventListener( "touchmove", this.fca_eoi_touch_move_listener );
 						}
 					}';
-				} else {
-					$ios_specific_options = '';
-				}
+			} else {
+				$ios_specific_options = '';
+			}
 
-				$featherlight_options = '{
+			$featherlight_options = '{
 					namespace: "fca_eoi_featherlight",
 					otherClose: ".fca_eoi_layout_popup_close"' . $ios_specific_options . ',
 					variant: ' . ( $is_iphone ? '"fca_eoi_device_iphone"' : 'null' ) . '
 				}';
-			} else {
-				$featherlight_options = 'undefined';
+		} else {
+			$featherlight_options = 'undefined';
+		}
+
+		foreach ( $lightboxes as $lightbox ) {
+
+			// Get conditions
+			$lightbox->fca_eoi = get_post_meta( $lightbox->ID , 'fca_eoi', true );
+			$publish_lightbox_mode = K::get_var( 'publish_lightbox_mode', $lightbox->fca_eoi, array() );
+
+			// If on a free distribution, force traditional popup mode
+			if ( 'free' === $this->settings['distribution'] ) {
+				$publish_lightbox_mode = 'traditional_popup';
 			}
 
-			?>
+			if ( 'two_step_optin' === $publish_lightbox_mode ) {
+				$has_two_step_optin = true;
+			}
+
+			$has_lightboxes = true;
+
+			// Output
+			printf( '
+				<style>.%s-content { background: transparent !important; }</style>
+				<div style="display:none"><div id="fca_eoi_lightbox_%s">%s</div></div>'
+				, EasyOptInsLayout::uses_new_css() ? 'fca_eoi_featherlight' : 'featherlight'
+				, $lightbox->ID
+				, do_shortcode( "[easy-opt-in id=$lightbox->ID]" )
+			);
+
+			if ( ! $has_two_step_optin ) {
+				$this->prepare_targeting_cat();
+				?>
 				<script>
-					jQuery( document ).ready( function( $ ) {
-
-						var $ = jQuery;
-
-						var fca_eoi_comp = function( a, b, op, negate ) {
-							negate = typeof negate !== 'undefined' ? negate : false;
-							switch ( op ) {
-								case 'eq': return negate ? ( ! ( a == b ) ) : ( a == b );
-								case 'gt': return negate ? ( ! ( a > b ) ) : ( a > b );
-								case 'gte': return negate ? ( ! ( a >= b ) ) : ( a >= b );
-								case 'lt': return negate ? ( ! ( a < b ) ) : ( a < b );
-								case 'lte': return negate ? ( ! ( a <= b ) ) : ( a <= b );
-							}
-						}
-
-						var ts = <?php echo time(); ?>;
-						var ts_0 = Math.floor( Date.now() / 1000 );
-						var conditions = <?php echo json_encode( $conditions_js ) ?>;
-
-						var show_popup = function() {
-							// The non-obvious +/-N makes sure the lightbox is shown on each page when applicable
-							var ts_1 = Math.floor( Date.now() / 1000 );
-							var data = {
-								action: 'fca_eoi_lightbox_set_cookie',
-								id: <?php echo $lightbox->ID; ?>,
-								show_every: <?php echo $fca_eoi_cookie_diff_helper[ $show_every ]; ?> - 10,
-								ts: ts + ts_1 - ts_0
-							};
-
-							var display = function() {
-								$.featherlight( $( '#fca_eoi_lightbox_<?php echo $lightbox->ID; ?>' ), <?php echo $featherlight_options ?> );
-								$.post( fca_eoi.ajax_url, data );
-								<?php echo EasyOptInsActivity::get_instance()->get_tracking_code( $lightbox->ID ) ?>
-							};
-
-							<?php if ( $is_exit_intervention ) { ?>
-								ouibounce( null, { aggressive: true, callback: display } );
-							<?php } else { ?>
-								display();
-							<?php } ?>
-						};
-
-						<?php if ( $needs_interval ) { ?>
-							var lightbox_interval = setInterval( function () {
-
-								var a, b, op, negate;
-								var parameters = []
-								parameters[ 'scrolled_percent' ] = ($(window).scrollTop()/($(document).height()-$(window).height()))*100;
-								parameters[ 'time_on_page' ] = Math.floor( Date.now() / 1000 ) - ts_0;
-
-
-								// Check conditions
-								for( i in conditions ) {
-
-									condition = conditions[ i ];
-
-									a = parameters[ condition.parameter ];
-									b = condition.value;
-									op = 'gte';
-
-									if ( ! fca_eoi_comp( a, b, op ) ) {
-										return;
-									}
-								}
-
-								// Show popup if conditions were met.
-								show_popup();
-
-								// Prevent showing the lightbox more than once
-								clearInterval( lightbox_interval );
-							}, 1000 );
-						<?php } else { ?>
-							show_popup();
-						<?php } ?>
+					jQuery( function() {
+						fca_eoi_on_conditions_pass( <?php echo $lightbox->ID ?>, function() {
+							jQuery.featherlight( jQuery( '#fca_eoi_lightbox_<?php echo $lightbox->ID; ?>' ), <?php echo $featherlight_options ?> );
+							<?php echo EasyOptInsActivity::get_instance()->get_tracking_code( $lightbox->ID ) ?>
+						} );
 					} );
 				</script>
-			<?php
+				<?php
+			}
 		}
 
 		if ( $has_two_step_optin ) {
+			$has_lightboxes = true;
+
 			?>
 			<script>
 				jQuery( document ).ready( function( $ ) {
@@ -2536,56 +2432,24 @@ class EasyOptInsPostTypes {
 			<?php
 		}
 
-		?>
-		<script>
-			jQuery( function( $ ) {
-				$( '.fca_eoi_featherlight' ).live( 'click', function( event ) {
-					var target = $( event.target );
+		if ( $has_lightboxes ) {
+			$this->enqueue_featherlight();
 
-					if ( target.hasClass( 'fca_eoi_featherlight-inner' ) ||
-					     target.hasClass( 'fca_eoi_form_content' ) )
-					{
-						$( '.fca_eoi_layout_popup_close' ).click();
-					}
+			?>
+			<script>
+				jQuery( function( $ ) {
+					$( '.fca_eoi_featherlight' ).live( 'click', function( event ) {
+						var target = $( event.target );
+
+						if ( target.hasClass( 'fca_eoi_featherlight-inner' ) ||
+							target.hasClass( 'fca_eoi_form_content' ) ) {
+							$( '.fca_eoi_layout_popup_close' ).click();
+						}
+					} );
 				} );
-			} );
-		</script>
-		<?php
-	}
-
-	public function fca_eoi_lightbox_set_cookie() {
-
-		// Time of last lightbox
-		setcookie( 'fca_eoi_lightbox_shown_ts'
-			, K::get_var( 'ts', $_POST, time() )
-			, time() + 86400 * 365
-			, COOKIEPATH
-			, COOKIE_DOMAIN
-		);
-
-		// This lightbox session
-		setcookie( sprintf( 'fca_eoi_lightbox_%d_session', $_POST[ 'id' ] )
-			, 1
-			, time() + $_POST[ 'show_every' ]
-			, COOKIEPATH
-			, COOKIE_DOMAIN
-		);
-
-		// Time of last lightbox with id in session
-		setcookie( sprintf( 'fca_eoi_lightbox_%d_%d_ts', $_POST[ 'id' ], K::get_var( 'fca_eoi_session', $_COOKIE ) )
-			, K::get_var( 'ts', $_POST, time() )
-			, time() + 1800
-			, COOKIEPATH
-			, COOKIE_DOMAIN
-		);
-
-		// Number of lightboxes with id in session
-		setcookie( sprintf( 'fca_eoi_lightbox_%d_%s_n', $_POST[ 'id' ], K::get_var( 'fca_eoi_session', $_COOKIE ) )
-			, K::get_var( sprintf( 'fca_eoi_lightbox_%d_%s_n', $_POST[ 'id' ], K::get_var( 'fca_eoi_session', $_COOKIE ) ), $_COOKIE, 0 ) + 1
-			, time() + 1800
-			, COOKIEPATH
-			, COOKIE_DOMAIN
-		);
+			</script>
+			<?php
+		}
 	}
 }
 

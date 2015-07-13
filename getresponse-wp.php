@@ -4,7 +4,7 @@
     Plugin URI: https://fatcatapps.com/optincat
     Description: The GetResponse Optin Cat WordPress Lets You Convert More Blog Viisots Into Email Subscribers. Set It Up In 2 Minutes.
     Author: Fatcat Apps
-    Version: 1.3.1
+    Version: 1.3.4
     Author URI: https://fatcatapps.com/
 */
 
@@ -56,7 +56,7 @@ if ( ! class_exists ( 'Mobile_Detect' ) ) {
 if( ! class_exists( 'DhEasyOptIns' ) ) {
 class DhEasyOptIns {
 
-    var $ver = '1.3.1';
+    var $ver = '1.3.4';
     var $distro = '';
     var $shortcode = 'optin-cat';
     var $shortcode_aliases = array(
@@ -180,10 +180,12 @@ class DhEasyOptIns {
             $this->settings[ 'providers' ][ $provider_id ] = call_user_func( "provider_$provider_id" );
         }
 
-        $options_changed = ! empty( $_POST['paf'] );
-        if ( $options_changed ) {
+        if ( $_SERVER['REQUEST_METHOD'] == 'POST' && ! empty( $_POST['paf_submit'] ) ) {
             $options_before = get_option('paf');
-            $options_after = $_POST['paf'];
+            $options_after = empty( $_POST['paf'] ) ? array() : $_POST['paf'];
+            $options_changed = true;
+        } else {
+            $options_changed = false;
         }
 
         // Load all powerups
@@ -264,6 +266,9 @@ if ( ! is_plugin_active( plugin_basename( __FILE__ ) ) ) {
         // If everything went well, continue with the activation setup
         require FCA_EOI_PLUGIN_DIR . 'includes/eoi-activity.php';
         EasyOptInsActivity::get_instance()->setup();
+
+        require FCA_EOI_PLUGIN_DIR . 'includes/eoi-init.php';
+        EasyOptInsInit::get_instance()->on_activate();
     }
 
     // If the plugin is not yet active, check for any obstacles in activation
