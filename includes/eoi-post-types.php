@@ -9,7 +9,7 @@ class EasyOptInsPostTypes {
 		'dashboard_widget' => 30
 	);
 
-	private $targeting_cat_path = 'assets/vendor/targeting-cat/TargetingCat-OptinCat-1.0.js';
+	private $targeting_cat_path = 'assets/vendor/targeting-cat/TargetingCat-OptinCat-1.1.min.js';
 
 	public function __construct( $settings ) {
 
@@ -2132,18 +2132,23 @@ class EasyOptInsPostTypes {
 	}
 
 	private function get_tc_conditions( $form_id, $post_id, $conditions ) {
-		$tc_conditions = array();
+		$tc_conditions       = array();
+		$sequence_conditions = array();
 
 		if ( ! empty( $conditions['show_every'] ) ) {
-			$tc_conditions[] = $this->to_show_every_tc_condition( $form_id, $conditions['show_every'] );
-		}
+			$condition = $this->to_show_every_tc_condition( $form_id, $conditions['show_every'] );
 
-		$has_exit = false;
+			if ( $condition === 'false' ) {
+				return array( 'false' );
+			} elseif ( $condition !== 'true' ) {
+				$sequence_conditions[] = $condition;
+			}
+		}
 
 		if ( ! empty( $conditions['conditions'] ) ) {
 			foreach ( $conditions['conditions'] as $condition ) {
 				if ( $condition['parameter'] === 'exit_intervention' ) {
-					$has_exit = true;
+					$sequence_conditions[] = 'exit';
 					continue;
 				}
 
@@ -2156,11 +2161,14 @@ class EasyOptInsPostTypes {
 
 		$tc_conditions = array( 'and' => $tc_conditions );
 
-		if ( $has_exit ) {
-			return array( 'sequence' => array( $tc_conditions, 'exit' ) );
-		} else {
-			return $tc_conditions;
+		if ( $sequence_conditions ) {
+			$tc_conditions = array( 'sequence' => array( $tc_conditions ) );
+			foreach ( $sequence_conditions as $condition ) {
+				$tc_conditions['sequence'][] = $condition;
+			}
 		}
+
+		return $tc_conditions;
 	}
 
 	private function echo_tc_conditions_for_form( $form_id, $post_id ) {
@@ -2261,7 +2269,7 @@ class EasyOptInsPostTypes {
 					'fca_eoi_tc_conditions_for': form_id
 				}, function( descriptors ) {
 					if ( ! fca_eoi_tc_configured ) {
-						TargetingCat_OptinCat.StorageManagerCookie.get_instance().default_configuration = <?php echo json_encode( $this->get_cookie_configuration() ) ?>;
+						TargetingCat_OptinCat.StorageManagerSessionPermanent.get_instance().default_configuration = <?php echo json_encode( $this->get_cookie_configuration() ) ?>;
 						fca_eoi_tc_configured = true;
 					}
 

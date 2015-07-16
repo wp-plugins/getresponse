@@ -32,8 +32,8 @@ class EasyOptInsWidget extends WP_Widget {
 			'height' => 350,
 			'id_base' => 'easy-opt-in-widget',
 		);
-		
-		$this->WP_Widget(
+
+		parent::__construct(
 			'easy-opt-in-widget'
 			, 'Optin Cat Sidebar Widget'
 			, $widget_ops, $control_ops
