@@ -7,7 +7,7 @@ Author URI: https://fatcatapps.com/
 Plugin URI: https://fatcatapps.com/optincat?utm_campaign=description%2Bcta&utm_source=https%3A%2F%2Fwordpress.org%2Fplugins%2Fgetresponse%2F&utm_medium=referral
 Requires at least: 3.9.1
 Tested up to: 4.3
-Stable tag: 1.3.5
+Stable tag: 1.3.6
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -81,6 +81,9 @@ To run GetResponse Forms by Optin Cat, you will need an account with GetResponse
 3. In your sidebar, select 'Optin Cat -> Add New' to create a new table
 
 == Changelog ==
+
+= GetResponse Forms by Optin Cat 1.3.6 =
+* Fixed a bug in the Popup targeting engine introduced in GetResponse Forms by Optin Cat 1.3.5.
 
 = GetResponse Forms by Optin Cat 1.3.5 =
 * Improved GetResponse Popup targeting engine: changed how a session is counted (a session now expires after 30 minutes of inactivity).

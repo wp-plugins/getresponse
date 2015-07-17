@@ -17,10 +17,6 @@ class EasyOptInsPostTypes {
 
 		$providers_available = array_keys( $this->settings[ 'providers' ] );
 
-		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
-			$this->targeting_cat_path = str_replace( '.js', '.min.js', $this->targeting_cat_path );
-		}
-
 		// Register custom post type
 		add_action( 'init', array( $this, 'register_custom_post_type' ) );
 		add_filter( 'manage_easy-opt-ins_posts_columns', array( $this, 'add_new_columns' ) );
@@ -2140,7 +2136,7 @@ class EasyOptInsPostTypes {
 
 			if ( $condition === 'false' ) {
 				return array( 'false' );
-			} elseif ( $condition !== 'true' ) {
+			} else {
 				$sequence_conditions[] = $condition;
 			}
 		}
@@ -2159,10 +2155,17 @@ class EasyOptInsPostTypes {
 			}
 		}
 
-		$tc_conditions = array( 'and' => $tc_conditions );
+		$has_conditions = ! empty ( $tc_conditions );
+		if ( $has_conditions ) {
+			$tc_conditions = array( 'and' => $tc_conditions );
+		}
 
 		if ( $sequence_conditions ) {
-			$tc_conditions = array( 'sequence' => array( $tc_conditions ) );
+			if ( $has_conditions ) {
+				$tc_conditions = array( 'sequence' => array( $tc_conditions ) );
+			} else {
+				$tc_conditions = array( 'sequence' => array() );
+			}
 			foreach ( $sequence_conditions as $condition ) {
 				$tc_conditions['sequence'][] = $condition;
 			}
