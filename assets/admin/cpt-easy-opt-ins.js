@@ -15,7 +15,7 @@ jQuery( document ).ready( function( $ ) {
 	// Use Layout 2 by default
 	$( '#fca_eoi_layout_select' )
 		.filter( function() { return fca_eoi_new_post; } )
-		.val( 'layout_2' )
+		.val( 'lightbox_1' )
 	;
 
 	// Helpers

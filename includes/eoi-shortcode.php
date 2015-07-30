@@ -41,6 +41,10 @@ class EasyOptInsShortcodes {
 	public function parse_shortcodes() {
 		global $post;
 
+		if ( empty( $post ) ) {
+			return;
+		}
+
 		if ( preg_match_all( '/' . get_shortcode_regex() . '/s', $post->post_content, $matches )
 		     && array_key_exists( 2, $matches )
 		     && array_key_exists( 3, $matches )

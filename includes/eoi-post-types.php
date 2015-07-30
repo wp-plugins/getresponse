@@ -1570,6 +1570,11 @@ class EasyOptInsPostTypes {
 			delete_post_meta( $post->ID, 'fca_eoi_layout' );
 			delete_post_meta( $post->ID, 'fca_eoi_provider' );
 
+			$on_save_function = $provider . '_on_save';
+			if ( function_exists( $on_save_function ) ) {
+				$meta = $on_save_function( $meta );
+			}
+
 			add_post_meta( $post->ID, 'fca_eoi', $meta );
 			add_post_meta( $post->ID, 'fca_eoi_layout', $meta[ 'layout' ] );
 			add_post_meta( $post->ID, 'fca_eoi_provider', $meta[ 'provider' ] );
@@ -1880,6 +1885,16 @@ class EasyOptInsPostTypes {
         }
         // End of Hack
 
+        // Hack for custom form upgrade
+        if( empty( $fca_eoi[ 'provider' ] ) ) {
+            $list_id = K::get_var(
+                'customform_list_id'
+                , $fca_eoi
+                , K::get_var( 'list_id' , $fca_eoi )
+            );
+            $provider = 'customform';
+        }
+        // End of Hack
 
         // Subscribe user
 		if( $list_id ) {
@@ -1967,6 +1982,10 @@ class EasyOptInsPostTypes {
 	public function content() {
 
 		global $post;
+
+		if ( empty( $post ) ) {
+			return;
+		}
 
 		// Do nothing if viewing an opt-in
 		if ( 'easy-opt-ins' === $post->post_type ) {

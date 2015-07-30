@@ -1,13 +1,13 @@
 === GetResponse Forms by Optin Cat ===
 Contributors: fatcatapps, davidhme
-Donate link: https://fatcatapps.com/optincat?utm_campaign=description%2Bcta&utm_source=https%3A%2F%2Fwordpress.org%2Fplugins%2Fgetresponse%2F&utm_medium=referral
+Donate link: https://fatcatapps.com/optincat/upgrade/?utm_campaign=description%2Bcta&utm_source=https%3A%2F%2Fwordpress.org%2Fplugins%2Fgetresponse%2F&utm_medium=referral
 Tags: getresponse, getresponse form, getresponse wordpress, get response, getresponse widget, getresponse shortcode, get response optin form
 
 Author URI: https://fatcatapps.com/
-Plugin URI: https://fatcatapps.com/optincat?utm_campaign=description%2Bcta&utm_source=https%3A%2F%2Fwordpress.org%2Fplugins%2Fgetresponse%2F&utm_medium=referral
+Plugin URI: https://fatcatapps.com/optincat/upgrade/?utm_campaign=description%2Bcta&utm_source=https%3A%2F%2Fwordpress.org%2Fplugins%2Fgetresponse%2F&utm_medium=referral
 Requires at least: 3.9.1
 Tested up to: 4.3
-Stable tag: 1.3.6
+Stable tag: 1.3.8
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,12 +56,12 @@ To run GetResponse Forms by Optin Cat, you will need an account with GetResponse
 > Smart Popup Targeting.<br />
 > Lots Of Additional Beatiful Layout & Design Options.<br />
 > Two Step Optin Feature: Trigger a GetResponse Popup Optin Form after the user clicks on a hyperlink.<br />
-> Offers Feature: Send optin baits & content upgrades straight from your WordPress backend.<br />
+> Content Upgrade Feature: Send optin baits & content upgrades straight from your WordPress backend.<br />
 > Exit Intervention: Display popups when the user is about to leave your site.<br />
 > Priority Email Support.<br />
 >
 >
-> [Learn more about GetResponse Forms by Optin Cat Premium >>](https://fatcatapps.com/optincat?utm_campaign=description%2Bcta&utm_source=https%3A%2F%2Fwordpress.org%2Fplugins%2Fgetresponse%2F&utm_medium=referral)
+> [Learn more about GetResponse Forms by Optin Cat Premium >>](https://fatcatapps.com/optincat/upgrade/?utm_campaign=description%2Bcta&utm_source=https%3A%2F%2Fwordpress.org%2Fplugins%2Fgetresponse%2F&utm_medium=referral)
 
 
 == Screenshots ==
@@ -81,6 +81,12 @@ To run GetResponse Forms by Optin Cat, you will need an account with GetResponse
 3. In your sidebar, select 'Optin Cat -> Add New' to create a new table
 
 == Changelog ==
+
+= GetResponse Forms by Optin Cat 1.3.8 =
+* Fixed an issue related to bots causing fake conversion data.
+
+= GetResponse Forms by Optin Cat 1.3.7 =
+* Tiny fix: Ignore shortcode if the global $post is empty
 
 = GetResponse Forms by Optin Cat 1.3.6 =
 * Fixed a bug in the Popup targeting engine introduced in GetResponse Forms by Optin Cat 1.3.5.
